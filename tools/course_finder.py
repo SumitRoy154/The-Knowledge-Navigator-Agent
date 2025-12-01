@@ -1,3 +1,5 @@
+
+# --- Imports and Environment Setup ---
 import os
 import requests
 from typing import List, Dict, Any
@@ -7,21 +9,27 @@ import re
 import time
 import html as html_lib
 
-# Load environment variables
-load_dotenv()
 
-# Google Custom Search API configuration
+# --- Load environment variables ---
+load_dotenv()
+# Google Custom Search API configuration (set in .env)
 GOOGLE_API_KEY = os.getenv("GOOGLE_SEARCH_API_KEY")
 SEARCH_ENGINE_ID = os.getenv("GOOGLE_SEARCH_ENGINE_ID")
-
 # If keys are missing, fall back to DuckDuckGo HTML scraping
 USE_GOOGLE_CSE = bool(GOOGLE_API_KEY and SEARCH_ENGINE_ID)
 
+
 class CourseFinder:
-    """Real-time course search tool with web search fallback (Google CSE -> DuckDuckGo)"""
+    """
+    Real-time course search tool with web search fallback (Google CSE -> DuckDuckGo).
+    - Prefers Google CSE if API keys are set.
+    - Falls back to DuckDuckGo HTML scraping if not.
+    - Normalizes and deduplicates course data.
+    - Designed for extensibility (caching, new platforms, etc.).
+    """
 
     def __init__(self):
-        # Removed static entries; keep an empty local DB for future caching/extensions
+        # Local DB is intentionally empty; structure supports future caching/extensions
         self.courses_db: Dict[str, List[Dict[str, Any]]] = self._initialize_course_database()
 
     def _initialize_course_database(self) -> Dict[str, List[Dict[str, Any]]]:
@@ -32,7 +40,10 @@ class CourseFinder:
         return {}
 
     def _call_google_cse(self, query: str, num: int = 5) -> List[Dict[str, Any]]:
-        """Call Google Custom Search API and return raw items (if configured)"""
+        """
+        Call Google Custom Search API and return raw items (if configured).
+        Returns a list of search result dicts.
+        """
         if not USE_GOOGLE_CSE:
             return []
         url = "https://www.googleapis.com/customsearch/v1"
@@ -91,6 +102,9 @@ class CourseFinder:
         return results
 
     def _infer_platform_from_url(self, url: str) -> str:
+        """
+        Infer the course platform from the URL (Coursera, Udemy, etc.).
+        """
         try:
             host = urlparse(url).netloc.lower()
             if "coursera.org" in host:
@@ -114,6 +128,9 @@ class CourseFinder:
             return "Unknown"
 
     def _parse_snippet_for_price_rating_duration(self, snippet: str) -> Dict[str, Any]:
+        """
+        Extract price, rating, and duration from a snippet string using regex.
+        """
         out = {"price": "Varies", "rating": None, "duration_weeks": None}
         s = (snippet or "").lower()
         if "free" in s or "audit" in s:
@@ -134,6 +151,9 @@ class CourseFinder:
         return out
 
     def _determine_phase(self, text: str, level: str) -> str:
+        """
+        Heuristically determine the learning phase (I/II/III) from text and level.
+        """
         s = (text or "").lower()
         if any(k in s for k in ["intro", "introduction", "beginner", "basics", "fundamentals"]):
             return "Phase I"
@@ -148,6 +168,9 @@ class CourseFinder:
         return "Phase III"
 
     def _build_course_from_search_item(self, item: Dict[str, Any], level: str) -> Dict[str, Any]:
+        """
+        Normalize a search result item into a course dict with standard fields.
+        """
         # Support both CSE item shape and DuckDuckGo fallback item shape
         title = item.get("title") or item.get("htmlTitle") or item.get("titleNoFormatting") or ""
         snippet = item.get("snippet") or item.get("htmlSnippet") or item.get("snippet_text") or ""
@@ -172,7 +195,8 @@ class CourseFinder:
     def search_online_courses(self, topic: str, level: str = "Beginner", max_results: int = 10) -> List[Dict[str, Any]]:
         """
         Live search for courses: prefer Google CSE when available, otherwise DuckDuckGo HTML fallback.
-        Returns normalized list of course dicts (name, platform, focus, price, rating, duration_weeks, phase, level, key_topics, url).
+        Returns top 5 courses with rating >= 3.0 if available, else top 5 rated overall.
+        Handles deduplication and sorts by rating and phase.
         """
         topic_key = (topic or "").strip()
         if not topic_key:
@@ -180,42 +204,44 @@ class CourseFinder:
 
         results: List[Dict[str, Any]] = []
 
+        # Broadened search queries
+        queries = [
+            f"{topic_key} {level} course site:coursera.org OR site:udemy.com OR site:edx.org OR site:linkedin.com OR site:freecodecamp.org OR site:codecademy.com OR site:pluralsight.com",
+            f"{topic_key} {level} course",
+            f"{topic_key} programming online course",
+            f"{topic_key} online course",
+            f"{topic_key} tutorial",
+            f"{topic_key} class",
+        ]
+        # Add C++ spelling variant if needed
+        if topic_key.lower() in ["c++", "c plus plus"]:
+            queries.append("c plus plus programming course")
+
         # 1) Try Google CSE if configured
         if USE_GOOGLE_CSE:
-            query = f"{topic_key} {level} course site:coursera.org OR site:udemy.com OR site:edx.org OR site:linkedin.com OR site:freecodecamp.org OR site:codecademy.com OR site:pluralsight.com"
-            items = self._call_google_cse(query, num=min(max_results, 10))
-            for it in items:
-                try:
-                    results.append(self._build_course_from_search_item(it, level))
-                except Exception:
-                    continue
-            time.sleep(0.1)
+            for query in queries:
+                items = self._call_google_cse(query, num=10)
+                for it in items:
+                    try:
+                        results.append(self._build_course_from_search_item(it, level))
+                    except Exception:
+                        continue
+                time.sleep(0.1)
 
-        # 2) If not enough results, use broader CSE query
-        if len(results) < max_results and USE_GOOGLE_CSE:
-            items = self._call_google_cse(f"{topic_key} {level} course", num=min(max_results * 2, 10))
-            for it in items:
-                try:
-                    course = self._build_course_from_search_item(it, level)
-                    if not any(course.get("url") == r.get("url") for r in results):
-                        results.append(course)
-                except Exception:
-                    continue
-            time.sleep(0.1)
+        # 2) DuckDuckGo HTML fallback (no API key required)
+        if len(results) < 10:
+            for query in queries:
+                ddg_items = self._call_duckduckgo(query, num=20)
+                for it in ddg_items:
+                    try:
+                        course = self._build_course_from_search_item({"title": it.get("title"), "snippet": it.get("snippet"), "link": it.get("link")}, level)
+                        if not any(course.get("url") == r.get("url") for r in results):
+                            results.append(course)
+                    except Exception:
+                        continue
+                time.sleep(0.1)
 
-        # 3) DuckDuckGo HTML fallback (no API key required)
-        if len(results) < max_results:
-            ddg_items = self._call_duckduckgo(f"{topic_key} {level} course", num=min(max_results * 2, 20))
-            for it in ddg_items:
-                try:
-                    course = self._build_course_from_search_item({"title": it.get("title"), "snippet": it.get("snippet"), "link": it.get("link")}, level)
-                    if not any(course.get("url") == r.get("url") for r in results):
-                        results.append(course)
-                except Exception:
-                    continue
-            time.sleep(0.1)
-
-        # 4) Final fallback: local DB (empty by default)
+        # 3) Final fallback: local DB (empty by default)
         if not results and self.courses_db:
             for db_topic, courses in self.courses_db.items():
                 if topic_key.lower() in db_topic.lower() or db_topic.lower() in topic_key.lower():
@@ -235,9 +261,6 @@ class CourseFinder:
             r.setdefault("phase", self._determine_phase(r.get("focus", "") + " " + r.get("name", ""), level))
             r.setdefault("level", (level or "Beginner").title())
 
-        # Sort by rating desc, then Phase I preference for Beginner
-        results = sorted(results, key=lambda x: (x.get("rating", 0.0), 1 if x.get("phase") == "Phase I" else 0), reverse=True)
-
         # Deduplicate by url or name+platform
         seen = set()
         deduped = []
@@ -247,22 +270,34 @@ class CourseFinder:
                 continue
             seen.add(key)
             deduped.append(c)
-            if len(deduped) >= int(max_results):
-                break
 
-        return deduped
+        # Filter for rating >= 3.0
+        filtered = [c for c in deduped if c.get("rating", 0.0) >= 3.0]
+
+        # Sort by rating desc, then Phase I preference for Beginner
+        if filtered:
+            sorted_courses = sorted(filtered, key=lambda x: (x.get("rating", 0.0), 1 if x.get("phase") == "Phase I" else 0), reverse=True)
+        else:
+            # If no course >= 3.0, show top 5 rated overall
+            sorted_courses = sorted(deduped, key=lambda x: (x.get("rating", 0.0), 1 if x.get("phase") == "Phase I" else 0), reverse=True)
+
+        return sorted_courses[:5]
 
     def get_phase_one_courses(self, courses: List[Dict]) -> List[Dict]:
-        """Filter and return only Phase I courses"""
+        """
+        Filter and return only Phase I courses.
+        """
         return [c for c in courses if c.get("phase") == "Phase I"]
 
     def get_all_topics(self) -> List[str]:
-        """Get list of all available topics from local DB (web search is dynamic)"""
+        """
+        Get list of all available topics from local DB (web search is dynamic).
+        """
         return list(self.courses_db.keys())
 
-# Create singleton instance
-course_finder = CourseFinder()
-
-def search_online_courses(topic: str, level: str = "Beginner", max_results: int = 10) -> List[Dict[str, Any]]:
-    """Wrapper function for course search"""
-    return course_finder.search_online_courses(topic, level, max_results)
+def search_online_courses(topic: str, level: str = "Beginner", max_results: int = 5) -> List[Dict[str, Any]]:
+    """
+    Wrapper function for course search. Always returns top 5 courses with rating >= 3.0.
+    """
+    course_finder = CourseFinder()  # Create an instance of CourseFinder
+    return course_finder.search_online_courses(topic, level, max_results=5)
