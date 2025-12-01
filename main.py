@@ -1,15 +1,15 @@
 import sys
+import logging
+from typing import List
+from tools.course_finder import search_online_courses
 from agent import KnowledgeNavigatorAgent
-from agent import Agent
-from memory import Memory
-from tools.course_finder import search_online_courses  # added import
-
-# This check is now primarily handled in config.py, but it's good practice
-# to ensure the module is imported correctly.
+from memory import ConversationMemory
 from config import GEMINI_API_KEY
 
+logging.basicConfig(level=logging.WARNING)
+
+
 def _extract_topic_and_level(user_input: str):
-    """Lightweight extractor for topic and level from user input."""
     ui = user_input.strip()
     level = None
     l = ui.lower()
@@ -19,24 +19,27 @@ def _extract_topic_and_level(user_input: str):
         level = "Intermediate"
     elif any(k in l for k in ["advanced", "expert"]):
         level = "Advanced"
-    # naive topic extraction: words after 'learn' or 'study' or 'want to learn'
     topic = None
-    triggers = ["learn", "study", "want to learn", "i want to learn", "master", "explore"]
+    triggers = ["i want to learn", "want to learn", "learn", "study", "master", "explore"]
     for t in triggers:
         if t in l:
-            # find position and take remainder
             idx = l.find(t)
             topic_part = ui[idx + len(t):].strip(" :,-.?")
             if topic_part:
-                # take up to first 5 words
-                topic = " ".join(topic_part.split()[:5])
+                topic = " ".join(topic_part.split()[:6])
             break
     return topic, level
 
-def _format_learning_path(topic: str, level: str, courses: list) -> str:
-    """Construct plain, numbered learning path and top-3 course list (with links)."""
+
+def _format_learning_path_cards(topic: str, level: str, courses: list) -> List[str]:
     topic_clean = topic.title() if topic else "Topic"
-    # Phases with simple descriptive text
+
+    intro_lines = []
+    intro_lines.append("1. Introduction")
+    intro_lines.append(f"1.1 {topic_clean} is an excellent subject to dive into. It builds practical skills that are widely applicable.")
+    intro_lines.append("1.2 As your Knowledge Navigator Agent and Academic Advisor, I searched the web for high-quality, beginner-friendly courses and structured them into a logical learning path tailored for a smooth start.")
+    intro_card = "\n".join(intro_lines)
+
     phases = [
         {
             "phase": "Phase I: The Foundation",
@@ -57,32 +60,24 @@ def _format_learning_path(topic: str, level: str, courses: list) -> str:
             "duration": "8-12 Weeks"
         }
     ]
-
-    lines = []
-    # 1. Introduction
-    lines.append("1. Introduction")
-    lines.append(f"1.1 {topic_clean} is an excellent subject to dive into. It builds practical skills that are widely applicable.")
-    lines.append("1.2 As your Knowledge Navigator Agent and Academic Advisor, I searched the web for high-quality, beginner-friendly courses and structured them into a logical learning path tailored for a smooth start.")
-    lines.append("")
-
-    # 2. Learning Path
-    lines.append(f"2. Learning Path: {topic_clean} Fundamentals")
+    lp_lines = []
+    lp_lines.append(f"2. Learning Path: {topic_clean} Fundamentals")
     for idx, p in enumerate(phases, start=1):
-        lines.append(f"2.{idx} {p['phase']}")
-        lines.append(f"2.{idx}.1 Focus: {p['focus']}")
-        lines.append(f"2.{idx}.2 Key Topics to Master: {p['key_topics']}")
-        lines.append(f"2.{idx}.3 Estimated Duration: {p['duration']}")
-        lines.append("")
+        lp_lines.append(f"2.{idx} {p['phase']}")
+        lp_lines.append(f"2.{idx}.1 Focus: {p['focus']}")
+        lp_lines.append(f"2.{idx}.2 Key Topics to Master: {p['key_topics']}")
+        lp_lines.append(f"2.{idx}.3 Estimated Duration: {p['duration']}")
+        lp_lines.append("")
+    learning_path_card = "\n".join(lp_lines).strip()
 
-    # 3. Top 3 Courses
-    lines.append("3. Top 3 Courses to Start Your Journey")
-    # Prefer Phase I courses, else top-rated overall
     phase_one = [c for c in courses if c.get("phase") == "Phase I"]
     candidates = phase_one or sorted(courses, key=lambda x: x.get("rating", 0), reverse=True)
     top3 = sorted(candidates, key=lambda x: x.get("rating", 0), reverse=True)[:3]
 
+    top_lines = []
+    top_lines.append("3. Top 3 Courses to Start Your Journey")
     if not top3:
-        lines.append("3.1 No courses were found. You can try refining the query or enabling Google CSE keys for better results.")
+        top_lines.append("3.1 No courses were found. You can try refining the query or enabling Google CSE keys for better results.")
     else:
         for i, c in enumerate(top3, start=1):
             name = c.get("name", "Unknown")
@@ -91,125 +86,98 @@ def _format_learning_path(topic: str, level: str, courses: list) -> str:
             price = c.get("price", "Varies")
             rating = f"{float(c.get('rating')):.1f}" if c.get("rating") else "N/A"
             url = c.get("url", "N/A")
-            lines.append(f"3.{i} Course Name: {name}")
-            lines.append(f"3.{i}.1 Platform: {platform}")
-            lines.append(f"3.{i}.2 Key Focus: {focus}")
-            lines.append(f"3.{i}.3 Price (USD): {price}")
-            lines.append(f"3.{i}.4 Rating: {rating}")
-            lines.append(f"3.{i}.5 Link: {url}")
-            lines.append("")
+            top_lines.append(f"3.{i} Course Name: {name}")
+            top_lines.append(f"3.{i}.1 Platform: {platform}")
+            top_lines.append(f"3.{i}.2 Key Focus: {focus}")
+            top_lines.append(f"3.{i}.3 Price (USD): {price}")
+            top_lines.append(f"3.{i}.4 Rating: {rating}")
+            top_lines.append(f"3.{i}.5 Link: {url}")
+            top_lines.append("")
+    top_courses_card = "\n".join(top_lines).strip()
 
-    # 4. Next Steps
-    lines.append("4. Next Steps")
+    next_lines = []
+    next_lines.append("4. Next Steps")
     if top3:
-        lines.append(f"4.1 Recommendation: Start with \"{top3[0].get('name')}\" for a strong foundation.")
-        lines.append("4.2 Study focus: Work through core concepts in Phase I and complete small practice exercises after each module.")
-        lines.append("4.3 Would you like to filter results to free resources only, include hands-on projects/notebooks, or search for a specific platform?")
+        next_lines.append(f"4.1 Recommendation: Start with \"{top3[0].get('name')}\" for a strong foundation.")
+        next_lines.append("4.2 Study focus: Work through core concepts in Phase I and complete small practice exercises after each module.")
+        next_lines.append("4.3 Would you like to filter results to free resources only, include hands-on projects/notebooks, or search for a specific platform?")
     else:
-        lines.append("4.1 I couldn't identify clear Phase I courses. Try broadening the search or enabling API keys for more results.")
-    lines.append("")
+        next_lines.append("4.1 I couldn't identify clear Phase I courses. Try broadening the search or enabling API keys for more results.")
+    next_steps_card = "\n".join(next_lines).strip()
 
-    return "\n".join(lines)
+    return [intro_card, learning_path_card, top_courses_card, next_steps_card]
+
 
 def main():
-    """Main conversation loop"""
-    # Initialize the agent and memory
-    knowledge_agent = Agent()
-    chat_memory = Memory()
+    if not GEMINI_API_KEY:
+        logging.warning("GEMINI_API_KEY not set. LLM features may not work. Live web search still functions (DuckDuckGo).")
+
+    # KnowledgeNavigatorAgent is available (fallback or full). If import fails earlier, an exception would have been raised.
+    try:
+        agent = KnowledgeNavigatorAgent()
+    except Exception as e:
+        logging.error(f"Failed to initialize KnowledgeNavigatorAgent: {e}")
+        agent = None
+
+    memory = ConversationMemory()
 
     print("Welcome to the Knowledge Navigator! I'm your Academic Advisor.")
-    print("You can ask me to find online courses for you. Type 'exit' to end the session.")
+    print("Type 'quit' or 'exit' to end, 'reset' to clear memory, 'summary' for session info.")
 
     while True:
-        # Get user input from the terminal
-        user_input = input("\nYou: ")
-
-        if user_input.lower() == 'exit':
+        user_input = input("\nYou: ").strip()
+        if not user_input:
+            continue
+        cmd = user_input.lower().strip()
+        if cmd in ("exit", "quit"):
             print("Thank you for using the Knowledge Navigator. Goodbye!")
             break
+        if cmd == "reset":
+            memory.clear_history()
+            print("Conversation memory cleared.")
+            continue
+        if cmd == "summary":
+            summary = memory.get_summary()
+            print("Session Summary:")
+            for k, v in summary.items():
+                print(f"  {k}: {v}")
+            continue
 
-        try:
-            # Get the current chat history
-            history = chat_memory.get_history()
-
-            # Process the user input and get the agent's response
-            agent_response = knowledge_agent.invoke(user_input, history)
-
-            # Print the agent's response with proper formatting
-            if isinstance(agent_response, str):
-                print(f"\nAdvisor: {agent_response}")
+        topic, level = _extract_topic_and_level(user_input)
+        if topic:
+            if not level:
+                level = memory.user_level
+            try:
+                courses = search_online_courses(topic, level=level, max_results=12)
+            except Exception as e:
+                logging.error(f"search_online_courses error: {e}")
+                courses = []
+            if courses:
+                cards = _format_learning_path_cards(topic, level, courses)
+                for idx, card in enumerate(cards, start=1):
+                    print(f"\nCard {idx}")
+                    print("-" * 60)
+                    print(card)
+                    print("-" * 60)
+                memory.add_message("user", user_input)
+                memory.add_message("assistant", "\n\n".join(cards))
+                continue
             else:
-                # Handle case where response is not a string
-                print("\nAdvisor:", str(agent_response))
-                
-            # Add the interaction to memory if it's not a 'more' command
-            if user_input.strip().lower() != 'more':
-                chat_memory.add_message(user_input, agent_response)
-                
-        except Exception as e:
-            error_msg = f"I'm sorry, but I encountered an error: {str(e)}"
-            print(f"\nAdvisor: {error_msg}")
-            logging.error(f"Error in main loop: {error_msg}")
+                print("No live course results found. Falling back to agent (if available).")
 
-        try:
-            # Initialize agent
-            agent = KnowledgeNavigatorAgent()
-            print("Agent initialized successfully!\n")
+        if agent:
+            try:
+                response = agent.generate_response(user_input)
+                print("\nAdvisor:")
+                print(response)
+                memory.add_message("user", user_input)
+                memory.add_message("assistant", response)
+            except Exception as e:
+                logging.error(f"Agent generate_response error: {e}")
+                print("Agent failed to generate a response. Try again or refine your query.")
+        else:
+            print("No agent available and no live search results. Try refining your query or set GEMINI_API_KEY.")
 
-            while True:
-                try:
-                    # Get user input
-                    user_input = input("You: ").strip()
-                    if not user_input:
-                        continue
-
-                    command = user_input.lower()
-                    if command == "quit":
-                        # ...existing quit handling ...
-                        break
-                    if command == "reset":
-                        agent.reset_conversation()
-                        # ...existing reset handling ...
-                        continue
-                    if command == "summary":
-                        # ...existing summary handling ...
-                        continue
-
-                    # New: attempt dynamic real-time course search + formatted output
-                    topic, level = _extract_topic_and_level(user_input)
-                    if topic:
-                        # prefer explicit level if found otherwise default to agent memory inference
-                        if not level:
-                            # get level from agent memory if available
-                            level = agent.get_session_summary().get("level", "Beginner")
-                        # perform live search
-                        courses = search_online_courses(topic, level=level, max_results=12)
-                        if courses:
-                            formatted = _format_learning_path(topic, level, courses)
-                            print("\n" + formatted + "\n")
-                            # also record in agent memory for continuity
-                            agent.memory.add_message("user", user_input)
-                            agent.memory.add_message("assistant", formatted)
-                            continue
-                        # if no courses found, fall back to LLM path
-                        print("\nNo live course results found — falling back to the agent's LLM formatter.\n")
-
-                    # fallback: use LLM agent (keeps existing behavior)
-                    print_separator("Processing your request...")
-                    print("Searching for courses and structuring your learning path...")
-                    response = agent.generate_response(user_input)
-                    print_response(response)
-
-                except KeyboardInterrupt:
-                    # ...existing interrupt handling ...
-                    continue
-                except Exception as e:
-                    # ...existing exception handling ...
-                    continue
-
-        except Exception as e:
-            # ...existing fatal error handling ...
-            sys.exit(1)
 
 if __name__ == "__main__":
     main()
