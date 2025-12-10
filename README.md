@@ -112,16 +112,23 @@ python3 main.py
 The project is modular, built to separate configuration, logic, and tools.
 
 ```
-knowledge_navigator_agent/
-├── .env                  # Environment variables (API Key)
-├── main.py               # Main entry point (starts the terminal chat loop)
-├── requirements.txt      # Project dependencies
-├── agent.py              # The Agent class, System Prompt, and ReAct logic
-├── config.py             # Loads .env settings
-├── memory.py             # Session/State Management implementation
+The-Knowledge-Navigator-Agent/
+│
+├── .env
+├── README.md
+├── Image.png
+├── requirements.txt
+├── agent.py
+├── config.py
+├── main.py
+├── memory.py
+└── test_key_loading.py
+│
 └── tools/
     ├── __init__.py
-    └── course_finder.py  # Contains the 'search_online_courses' custom function
+    ├── course_finder.py
+    └── roadmap_generator.py
+    
 ```
 
 ## 🛠️ Future Roadmap
