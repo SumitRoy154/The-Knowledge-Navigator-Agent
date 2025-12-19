@@ -131,10 +131,3 @@ The-Knowledge-Navigator-Agent/
     
 ```
 
-## 🛠️ Future Roadmap
-
-The next phase would focus on moving from sequencing to truly **adaptive learning** using a **Multi-Agent System**:
-
-1.  **Adaptive Learning Path (Advanced RAG):** Implement a **Vector Database** to store long-term user history (past courses, skill gaps). This enables **real-time adaptive guidance** that changes the path based on proven user progress.
-2.  **Specialized Multi-Agent System (MAS):** Introduce a dedicated **Path Planning Agent** whose sole job is to ingest course results and calculate the optimal sequence, delegating the final conversational output to the main Concierge Agent.
-3.  **Formal Evaluation:** Implement formal metrics to measure **Tool-Use Accuracy** and **Groundedness** (verifying that the LLM's final answer is supported by the data from the custom tool).
