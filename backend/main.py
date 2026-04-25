@@ -1,10 +1,11 @@
-
 import logging
+
 from agent import Agent
 from memory import Memory
 from config import GEMINI_API_KEY
 
 logging.basicConfig(level=logging.WARNING)
+
 
 def main():
     if not GEMINI_API_KEY:
@@ -41,7 +42,6 @@ def main():
                 print(f"  {k}: {v}")
             continue
 
-        # Use the improved agent logic for all queries
         response = agent.invoke(user_input, memory.get_history())
         print("\nAdvisor:")
         print(response)

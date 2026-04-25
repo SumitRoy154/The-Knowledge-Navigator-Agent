@@ -1,6 +1,0 @@
-google-generativeai
-python-dotenv
-langchain
-langchain-google-genai
-pydantic
-requests>=2.31.0

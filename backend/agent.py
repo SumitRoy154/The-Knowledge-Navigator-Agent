@@ -84,15 +84,14 @@ class Agent:
 
         # 5. Create the Agent Executor
         self.executor = AgentExecutor(
-            agent=agent, 
-            tools=tools, 
-            verbose=True, # Set to True to see agent's thought process
-            handle_parsing_errors=True # Gracefully handle any LLM output errors
+            agent=agent,
+            tools=tools,
+            verbose=True,
+            handle_parsing_errors=True
         )
 
     def format_response(self, response):
         """Format the agent's response to be clean and consistent."""
-        # If the response is a list of courses, format it nicely
         if isinstance(response, list) and all(isinstance(item, dict) and 'course_name' in item for item in response):
             formatted = "\nHere are some recommended courses for you:\n"
             for i, course in enumerate(response, 1):
@@ -101,144 +100,38 @@ class Agent:
                 formatted += f"\n   Price: {'Free' if course['price_usd'] == 0.0 else f'${course['price_usd']}'}"
                 formatted += f"\n   Rating: {course['average_rating']}/5"
                 formatted += f"\n   Duration: {course['duration_weeks']} weeks"
-                # Only show one link, as a Markdown link
                 formatted += f"\n   [Course Link]({course['course_url']})\n"
             return formatted
-            
-        # For regular text responses, clean up formatting
+
         if isinstance(response, str):
-            # Remove any color codes or special formatting
             import re
             response = re.sub(r'\x1b\[([0-9A-Za-z;?]?[0-9]*)*[m|K]?', '', response)
-            
-            # Clean up the response
             lines = [line.strip() for line in response.split('\n') if line.strip()]
             return '\n'.join(lines)
-            
+
         return str(response)
 
     def invoke(self, user_input: str, chat_history: list):
         """Invokes the agent with user input and chat history, returning the response."""
         logging.info(f"Invoking agent with input: '{user_input}' and history: {len(chat_history)} messages")
         try:
-            # Process the input
             response = self.executor.invoke({
                 "input": user_input,
                 "chat_history": [msg for msg in chat_history if not isinstance(msg, dict)]
             })
-            
+
             full_response = response['output']
             formatted_response = self.format_response(full_response)
-            
-            # Store the response in the chat history
+
             chat_history.append({
                 'user_input': user_input,
                 'response': formatted_response
             })
-                
+
             logging.info("Agent response formatted")
             return formatted_response
-            
+
         except Exception as e:
             error_msg = f"I'm sorry, but I encountered an error: {str(e)}"
             logging.error(f"Error in agent invocation: {error_msg}")
             return error_msg
-
-# Minimal fallback KnowledgeNavigatorAgent so main.py can import and run.
-# This agent uses the live search tool (search_online_courses) to build a simple
-# numbered response when a full LLM-based agent is not available.
-
-import re
-from typing import List
-from tools.course_finder import search_online_courses
-
-class KnowledgeNavigatorAgent:
-    """Lightweight agent fallback that formats live search results into a numbered response."""
-
-    def __init__(self):
-        # No external LLM calls here — simple deterministic fallback.
-        self.name = "KnowledgeNavigatorAgent (fallback)"
-
-    def _extract_topic(self, text: str) -> str:
-        t = (text or "").strip()
-        l = t.lower()
-        triggers = ["i want to learn", "want to learn", "learn", "study", "master", "explore"]
-        for trig in triggers:
-            if trig in l:
-                idx = l.find(trig)
-                rem = t[idx + len(trig):].strip(" :,-.?")
-                if rem:
-                    # return up to first 6 words as topic
-                    return " ".join(rem.split()[:6])
-        # fallback: first two words
-        parts = t.split()
-        return " ".join(parts[:2]) if parts else ""
-
-    def _build_simple_response(self, topic: str, courses: List[dict]) -> str:
-        topic_clean = topic.title() if topic else "Topic"
-        lines = []
-        # 1. Introduction
-        lines.append("1. Introduction")
-        lines.append(f"1.1 {topic_clean} is an excellent subject to dive into. It builds practical skills that are widely applicable.")
-        lines.append("1.2 I searched the web for relevant beginner-friendly courses and structured them into a simple learning path.")
-        lines.append("")
-        # 2. Learning Path (simple fixed phases)
-        lines.append(f"2. Learning Path: {topic_clean} Fundamentals")
-        lines.append("2.1 Phase I: The Foundation")
-        lines.append("2.1.1 Focus: Terminology and core mechanics")
-        lines.append("2.1.2 Key Topics to Master: Core fundamentals, basic terminology and concepts")
-        lines.append("2.1.3 Estimated Duration: 4-8 Weeks")
-        lines.append("")
-        lines.append("2.2 Phase II: Core Application")
-        lines.append("2.2.1 Focus: Practical application and hands-on skills")
-        lines.append("2.2.2 Key Topics to Master: Projects, applied techniques, workflows")
-        lines.append("2.2.3 Estimated Duration: 6-10 Weeks")
-        lines.append("")
-        lines.append("2.3 Phase III: Analysis & Reporting")
-        lines.append("2.3.1 Focus: Advanced topics and real-world scenarios")
-        lines.append("2.3.2 Key Topics to Master: Advanced concepts, evaluation, deployment")
-        lines.append("2.3.3 Estimated Duration: 8-12 Weeks")
-        lines.append("")
-        # 3. Top 3 Courses
-        lines.append("3. Top 3 Courses to Start Your Journey")
-        if not courses:
-            lines.append("3.1 No courses found for this topic.")
-        else:
-            # prefer Phase I when present
-            phase_one = [c for c in courses if c.get("phase") == "Phase I"]
-            candidates = phase_one or sorted(courses, key=lambda x: x.get("rating", 0), reverse=True)
-            top3 = sorted(candidates, key=lambda x: x.get("rating", 0), reverse=True)[:3]
-            for i, c in enumerate(top3, start=1):
-                name = c.get("name", "Unknown")
-                platform = c.get("platform", "Unknown")
-                focus = (c.get("focus") or c.get("key_topics") or "").replace("\n", " ")
-                price = c.get("price", "Varies")
-                rating = f"{float(c.get('rating')):.1f}" if c.get("rating") else "N/A"
-                url = c.get("url", "N/A")
-                lines.append(f"3.{i} Course Name: {name}")
-                lines.append(f"3.{i}.1 Platform: {platform}")
-                lines.append(f"3.{i}.2 Key Focus: {focus}")
-                lines.append(f"3.{i}.3 Price (USD): {price}")
-                lines.append(f"3.{i}.4 Rating: {rating}")
-                lines.append(f"3.{i}.5 Link: {url}")
-                lines.append("")
-        # 4. Next steps
-        lines.append("4. Next Steps")
-        if courses:
-            first = courses[0].get("name") if courses else "a recommended course"
-            lines.append(f"4.1 Recommendation: Start with \"{first}\" for a strong foundation.")
-            lines.append("4.2 Study focus: Work through Phase I material and practice with short exercises.")
-        else:
-            lines.append("4.1 I couldn't find suitable courses. Try refining your query.")
-        return "\n".join(lines)
-
-    def generate_response(self, user_input: str) -> str:
-        """Public method expected by main.py — returns a plain text response."""
-        topic = self._extract_topic(user_input)
-        if not topic:
-            return "Please tell me what you want to learn (for example: 'I want to learn accounting')."
-        try:
-            courses = search_online_courses(topic, level="Beginner", max_results=12)
-        except Exception:
-            courses = []
-        return self._build_simple_response(topic, courses)

@@ -2,6 +2,52 @@
 
 # 🎓 The Knowledge Navigator Agent
 
+## Web Project Structure (New)
+
+The repository is now structured for a full website build with separate backend and frontend apps:
+
+```
+The-Knowledge-Navigator-Agent/
+├── backend/
+│   ├── app/
+│   │   ├── api/routes/
+│   │   ├── core/
+│   │   ├── models/
+│   │   └── services/
+│   ├── requirements.txt
+│   └── run.py
+├── frontend/
+│   ├── src/
+│   ├── package.json
+│   └── vite.config.js
+├── .gitignore
+├── .env.example
+└── docker-compose.yml
+```
+
+## Quick Start (Website Mode)
+
+1. Copy `.env.example` to `.env` and fill in required keys.
+2. Start backend:
+
+```bash
+cd backend
+python -m venv .venv
+. .venv/Scripts/activate
+pip install -r requirements.txt
+python run.py
+```
+
+3. Start frontend in a new terminal:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+4. Open `http://localhost:5173`.
+
 <p align="center">
   <img src="https://raw.githubusercontent.com/SumitRoy154/The-Knowledge-Navigator-Agent/main/Image.png" alt="The Knowledge Navigator Agent Logo and Uses" width="560"/>
   <br>
@@ -83,7 +129,7 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 Install the required packages:
 
 ```bash
-pip install -r requirements.txt
+pip install -r backend/requirements.txt
 ```
 
 ### 3\. Configure API Key
@@ -100,7 +146,7 @@ GEMINI_API_KEY="YOUR_API_KEY_HERE"
 Start the interactive terminal session:
 
 ```bash
-python3 main.py
+python3 backend/main.py
 ```
 
 **Example Prompt:** `I need to learn Python. I am a beginner, and my budget is $100.`
@@ -114,14 +160,15 @@ The project is modular, built to separate configuration, logic, and tools.
 ```
 knowledge_navigator_agent/
 ├── .env                  # Environment variables (API Key)
-├── main.py               # Main entry point (starts the terminal chat loop)
-├── requirements.txt      # Project dependencies
-├── agent.py              # The Agent class, System Prompt, and ReAct logic
-├── config.py             # Loads .env settings
-├── memory.py             # Session/State Management implementation
-└── tools/
+└── backend/
+  ├── main.py           # Main entry point (starts the terminal chat loop)
+  ├── requirements.txt  # Backend dependencies
+  ├── agent.py          # The Agent class, System Prompt, and ReAct logic
+  ├── config.py         # Loads .env settings
+  ├── memory.py         # Session/State Management implementation
+  └── tools/
     ├── __init__.py
-    └── course_finder.py  # Contains the 'search_online_courses' custom function
+    └── course_finder.py
 ```
 
 ## 🛠️ Future Roadmap
