@@ -160,15 +160,14 @@ The project is modular, built to separate configuration, logic, and tools.
 ```
 knowledge_navigator_agent/
 ├── .env                  # Environment variables (API Key)
-└── backend/
-  ├── main.py           # Main entry point (starts the terminal chat loop)
-  ├── requirements.txt  # Backend dependencies
-  ├── agent.py          # The Agent class, System Prompt, and ReAct logic
-  ├── config.py         # Loads .env settings
-  ├── memory.py         # Session/State Management implementation
-  └── tools/
+├── main.py               # Main entry point (starts the terminal chat loop)
+├── requirements.txt      # Project dependencies
+├── agent.py              # The Agent class, System Prompt, and ReAct logic
+├── config.py             # Loads .env settings
+├── memory.py             # Session/State Management implementation
+└── tools/
     ├── __init__.py
-    └── course_finder.py
+    └── course_finder.py  # Contains the 'search_online_courses' custom function
 ```
 
 ## 🛠️ Future Roadmap
