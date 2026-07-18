@@ -2,7 +2,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
-from config import GEMINI_API_KEY, GEMINI_MODEL
+from app.core.config import GEMINI_API_KEY, GEMINI_MODEL
 
 _llm = ChatGoogleGenerativeAI(
     model=GEMINI_MODEL,

@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 
 # Local imports
-from config import GEMINI_API_KEY, GEMINI_MODEL
+from app.core.config import GEMINI_API_KEY, GEMINI_MODEL
 from tools.course_finder import search_online_courses
 from tools.roadmap_generator import generate_learning_roadmap
 
